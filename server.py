@@ -1,46 +1,59 @@
-from flask import Flask, request, send_from_directory, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 import os
 from datetime import datetime
 
 app = Flask(__name__)
 
-# ✅ Save uploads to /app/uploads (Railway safe path)
-UPLOAD_FOLDER = os.path.join(os.getcwd(), "uploads")
+# Folder to store uploaded images
+UPLOAD_FOLDER = "images"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+@app.route("/")
+def home():
+    return jsonify({
+        "status": "running",
+        "message": "Camera Uploader Server is active!"
+    })
+
+# --- Upload route ---
 @app.route("/upload", methods=["POST"])
-def upload_image():
-    if "image" not in request.files:
-        return "No image part", 400
+def upload_file():
+    # Check if file part exists
+    if "file" not in request.files:
+        return jsonify({"error": "No file field found"}), 400
 
-    image = request.files["image"]
-    if image.filename == "":
-        return "No selected file", 400
+    file = request.files["file"]
 
-    # ✅ Save file with timestamp
-    filename = datetime.now().strftime("%Y%m%d_%H%M%S") + ".jpg"
-    save_path = os.path.join(UPLOAD_FOLDER, filename)
-    image.save(save_path)
-    print(f"✅ Saved: {save_path}")
-    return "Uploaded", 200
+    # Check if filename is valid
+    if file.filename == "":
+        return jsonify({"error": "No file selected"}), 400
 
-@app.route("/uploads/<path:filename>")
-def serve_file(filename):
-    return send_from_directory(UPLOAD_FOLDER, filename)
+    # Give each file a unique name (timestamp)
+    filename = datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + file.filename
+    filepath = os.path.join(UPLOAD_FOLDER, filename)
 
-@app.route("/images")
+    # Save the uploaded image
+    file.save(filepath)
+
+    print(f"✅ File received: {filename}")
+
+    return jsonify({"message": "File uploaded successfully", "file": filename}), 200
+
+
+# --- List all images ---
+@app.route("/images", methods=["GET"])
 def list_images():
-    files = sorted(os.listdir(UPLOAD_FOLDER))
+    files = os.listdir(UPLOAD_FOLDER)
+    files = sorted(files, reverse=True)
     return jsonify(files)
 
-@app.route("/")
-def gallery():
-    files = sorted(os.listdir(UPLOAD_FOLDER), reverse=True)
-    html = "<h2>Uploaded Images</h2>"
-    for f in files:
-        html += f'<div style="margin:10px;display:inline-block;">'
-        html += f'<img src="/uploads/{f}" width="200"><br>{f}</div>'
-    return html
+
+# --- Serve individual image files ---
+@app.route("/images/<filename>", methods=["GET"])
+def get_image(filename):
+    return send_from_directory(UPLOAD_FOLDER, filename)
+
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
